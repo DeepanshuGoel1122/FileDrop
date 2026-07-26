@@ -115,7 +115,7 @@ export default function DirectRoom() {
     addHostFiles(acceptedFiles);
   }, [isHost, addHostFiles]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({ 
     onDrop,
     noClick: true,
     noKeyboard: true 
@@ -193,14 +193,15 @@ export default function DirectRoom() {
       <input {...getInputProps()} />
       
       <div className="w-full max-w-4xl flex justify-between items-center mb-8 relative z-10">
-        <div className="flex items-center gap-4">
-          <div className="h-10 px-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2">
-            <Zap className="w-4 h-4 text-emerald-400" />
-            <span className="font-mono text-emerald-400/90 font-medium">{roomName}</span>
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink min-w-0">
+          <div className="h-10 px-3 sm:px-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center gap-2 min-w-0">
+            <Zap className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span className="font-mono text-emerald-400/90 font-medium truncate">{roomName}</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-white/50 bg-white/5 px-3 py-1.5 rounded-lg border border-white/5">
+          <div className="flex items-center gap-1.5 sm:gap-2 text-sm text-white/50 bg-white/5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-white/5 flex-shrink-0">
              <Users className="w-4 h-4" />
-             <span>{peers.length} {peers.length === 1 ? 'Peer' : 'Peers'} Connected</span>
+             <span>{peers.length}</span>
+             <span className="hidden sm:inline">{peers.length === 1 ? 'Peer' : 'Peers'} Connected</span>
           </div>
         </div>
 
@@ -241,12 +242,15 @@ export default function DirectRoom() {
               )}
 
               {isHost && (
-                 <div className="w-full border-2 border-dashed border-white/20 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-white/5">
+                 <div 
+                   onClick={open}
+                   className="w-full border-2 border-dashed border-white/20 rounded-xl p-6 flex flex-col items-center justify-center text-center bg-white/5 cursor-pointer hover:bg-white/10 transition-colors"
+                 >
                     <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center mb-3">
                        <Zap className="w-5 h-5 text-emerald-400" />
                     </div>
-                    <p className="text-sm font-medium text-white/90">Drag & Drop files</p>
-                    <p className="text-xs text-white/50 mt-1">No file size limits</p>
+                    <p className="text-sm font-medium text-white/90">Drag & Drop or Click</p>
+                    <p className="text-xs text-white/50 mt-1">to select files</p>
                  </div>
               )}
            </div>
