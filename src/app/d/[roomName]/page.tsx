@@ -34,11 +34,8 @@ export default function DirectRoom() {
       setIsAuthenticated(true); // Host is automatically authenticated
     }
     
-    // Check if we have a saved password
-    const savedPwd = sessionStorage.getItem(`direct_pwd_${roomName}`);
-    if (savedPwd) {
-      setPassword(savedPwd);
-    }
+    // We no longer pre-fill or save passwords in sessionStorage to ensure security
+    // upon returning to the room.
     
     // Generate a unique peer ID for this session
     setLocalPeerId(uuidv4());
@@ -91,7 +88,6 @@ export default function DirectRoom() {
         return;
       }
       
-      sessionStorage.setItem(`direct_pwd_${roomName}`, password);
       setIsAuthenticated(true);
     } catch (err) {
       console.error(err);
@@ -138,7 +134,7 @@ export default function DirectRoom() {
           <h2 className="text-2xl font-bold font-outfit text-white mb-2">Host Disconnected</h2>
           <p className="text-white/60 mb-6">The host has closed their browser or left the room. This direct sharing session has ended.</p>
           <button 
-            onClick={() => router.push('/')}
+            onClick={() => router.push('/d')}
             className="glass-button w-full py-3 rounded-xl font-bold"
           >
             Return Home
