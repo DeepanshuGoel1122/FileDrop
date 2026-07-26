@@ -42,4 +42,4 @@ yarn-error.log*
 next-env.d.ts
 
 Todo.txt
-supabase_schema.sql
+PeerTodo.txt

@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Outfit } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -41,10 +40,9 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${outfit.variable} h-full antialiased dark`}
     >
-      <body className="min-h-full flex flex-col font-sans" suppressHydrationWarning>
+      <body className="min-h-[100dvh] flex flex-col font-sans" suppressHydrationWarning>
         <Header />
         <main className="flex-1 flex flex-col">{children}</main>
-        <Footer />
       </body>
     </html>
   );

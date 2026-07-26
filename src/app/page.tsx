@@ -6,10 +6,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Shield, Clock, Zap, ArrowRight, Lock, Loader2, X, ChevronDown } from "lucide-react";
 import { generateRoomName } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import Footer from "@/components/Footer";
 
 export default function Home() {
   const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [joinRoomName, setJoinRoomName] = useState("");
   const [roomName, setRoomName] = useState("");
   const [password, setPassword] = useState("");
   const [expiryDays, setExpiryDays] = useState(1); // 1 = 24h
@@ -25,12 +28,36 @@ export default function Home() {
     { value: 30, label: "30 Days" }
   ];
 
-  const handleCreateRoomClick = () => {
-    setRoomName(generateRoomName());
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
+
+  const handleCreateRoomClick = async () => {
+    setIsGeneratingName(true);
+    let newName = generateRoomName();
+    let isUnique = false;
+
+    while (!isUnique) {
+      const { data } = await supabase.from("rooms").select("id, expires_at").eq("name", newName).single();
+      if (data) {
+        if (new Date(data.expires_at) < new Date()) {
+          // It's expired, we can take over the name by deleting it first
+          await supabase.from("rooms").delete().eq("name", newName);
+          isUnique = true;
+        } else {
+          // Already active, generate another one
+          newName = generateRoomName();
+        }
+      } else {
+        // Name is unique
+        isUnique = true;
+      }
+    }
+
+    setRoomName(newName);
     setIsModalOpen(true);
     setPassword("");
     setError("");
     setExpiryDays(1);
+    setIsGeneratingName(false);
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -40,10 +67,28 @@ export default function Home() {
       return;
     }
 
+    const formattedName = roomName.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!formattedName) {
+      setError("Room name cannot be empty.");
+      return;
+    }
+
     setIsLoading(true);
     setError("");
 
     try {
+      const { data: existingRoom } = await supabase.from("rooms").select("id, expires_at").eq("name", formattedName).single();
+      if (existingRoom) {
+        if (new Date(existingRoom.expires_at) < new Date()) {
+          // Overwrite expired room
+          await supabase.from("rooms").delete().eq("name", formattedName);
+        } else {
+          setError("This room name is currently active. Please choose another.");
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + Number(expiryDays));
 
@@ -55,7 +100,7 @@ export default function Home() {
 
       const { error: dbError } = await supabase
         .from("rooms")
-        .insert([{ name: roomName, password_hash: passwordHash, expires_at: expiresAt.toISOString() }]);
+        .insert([{ name: formattedName, password_hash: passwordHash, expires_at: expiresAt.toISOString() }]);
 
       if (dbError) {
         console.error(dbError);
@@ -64,8 +109,8 @@ export default function Home() {
         return;
       }
 
-      sessionStorage.setItem(`room_pwd_${roomName}`, password);
-      router.push(`/${roomName}`);
+      sessionStorage.setItem(`room_pwd_${formattedName}`, password);
+      router.push(`/${formattedName}`);
     } catch (err) {
       console.error(err);
       setError("An unexpected error occurred.");
@@ -92,6 +137,7 @@ export default function Home() {
   ];
 
   return (
+    <>
     <div className="flex-1 flex flex-col items-center justify-center p-4">
       <section className="w-full max-w-5xl mx-auto flex flex-col items-center text-center pt-12 pb-20">
         <motion.div
@@ -123,16 +169,37 @@ export default function Home() {
           No registration required. Everything is destroyed automatically.
         </motion.p>
         
-        <motion.button
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.3 }}
-          onClick={handleCreateRoomClick}
-          className="glass-button flex items-center gap-2 px-8 py-4 rounded-2xl text-lg font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 group"
-        >
-          Create Room
-          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-        </motion.button>
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            onClick={handleCreateRoomClick}
+            disabled={isGeneratingName}
+            className="glass-button flex items-center gap-2 px-8 py-4 rounded-2xl text-lg font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 group disabled:opacity-50"
+          >
+            {isGeneratingName ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" /> Preparing...
+              </>
+            ) : (
+              <>
+                Create Room
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </motion.button>
+
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            onClick={() => setIsJoinModalOpen(true)}
+            className="glass-card flex items-center gap-2 px-8 py-4 rounded-2xl text-lg font-bold hover:bg-white/10 hover:border-white/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 group border-white/10"
+          >
+            Join Room
+          </motion.button>
+        </div>
       </section>
 
       <section className="w-full max-w-5xl mx-auto py-12">
@@ -190,11 +257,22 @@ export default function Home() {
                 </div>
                 <h2 className="text-2xl font-bold font-outfit text-white mb-1">Secure Your Room</h2>
                 <p className="text-white/60 text-sm">
-                  Room: <span className="text-primary font-mono bg-primary/10 px-2 py-0.5 rounded">{roomName}</span>
+                  Customize the generated room name if you like.
                 </p>
               </div>
 
               <form onSubmit={handleCreateSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-white/60 mb-1 ml-1">Room Name</label>
+                  <input
+                    type="text"
+                    value={roomName}
+                    onChange={(e) => setRoomName(e.target.value)}
+                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/40 font-mono text-sm"
+                    placeholder="e.g. my-secret-room"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-white/60 mb-1 ml-1">Password</label>
                   <input
@@ -274,6 +352,69 @@ export default function Home() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Join Modal */}
+      <AnimatePresence>
+        {isJoinModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsJoinModalOpen(false)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card w-full max-w-md p-6 relative overflow-hidden z-10"
+            >
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-primary/30 rounded-full blur-[3xl] pointer-events-none" />
+              <button onClick={() => setIsJoinModalOpen(false)} className="absolute top-4 right-4 text-white/40 hover:text-white bg-white/5 p-1 rounded-full transition-colors z-20">
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="flex flex-col items-center text-center mb-6 mt-2">
+                <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mb-4 border border-white/10">
+                   <ArrowRight className="w-6 h-6 text-white/60" />
+                </div>
+                <h2 className="text-2xl font-bold font-outfit text-white mb-1">Join Room</h2>
+                <p className="text-white/60 text-sm">Enter the room name to join</p>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (joinRoomName.trim()) {
+                  router.push(`/${joinRoomName.trim().toLowerCase()}`);
+                }
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-white/80 mb-1.5 ml-1">Room Name</label>
+                  <input
+                    type="text"
+                    value={joinRoomName}
+                    onChange={(e) => setJoinRoomName(e.target.value)}
+                    className="glass-input w-full px-4 py-3 rounded-xl text-white placeholder-white/40 outline-none focus:ring-2 focus:ring-primary/50"
+                    placeholder="e.g. bold-tree"
+                    autoFocus
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!joinRoomName.trim()}
+                  className="glass-button w-full py-3 rounded-xl font-bold flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed mt-4"
+                >
+                  Join Room
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
+    <Footer />
+    </>
   );
 }

@@ -25,12 +25,23 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
   const [newText, setNewText] = useState("");
   const [isPostingText, setIsPostingText] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
+  
+  const [page, setPage] = useState(0);
+  const [hasMoreFiles, setHasMoreFiles] = useState(true);
+  const [hasMoreTexts, setHasMoreTexts] = useState(true);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const PAGE_SIZE = 20;
+
   const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
   const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: number }>({});
+  
+  const abortControllers = useRef<{ [key: string]: AbortController }>({});
+  const abortedUploads = useRef<Set<string>>(new Set());
   
   // Modal state
   const [isDestroyModalOpen, setIsDestroyModalOpen] = useState(false);
   const [isDestroying, setIsDestroying] = useState(false);
+  const [isRoomExpiredModalOpen, setIsRoomExpiredModalOpen] = useState(false);
   
   const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'file' | 'text', path?: string } | null>(null);
   const [isDeletingItem, setIsDeletingItem] = useState(false);
@@ -75,7 +86,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
         sessionStorage.setItem(`room_pwd_${roomName}`, pwd);
         fetchContent(roomData.id);
       } else {
-        setError("Incorrect password.");
+        setError("Incorrect Password!");
       }
     } catch (err) {
       console.error(err);
@@ -86,11 +97,75 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
   };
 
   const fetchContent = async (roomId: string) => {
-    const { data: textData } = await supabase.from("texts").select("*").eq("room_id", roomId).order("created_at", { ascending: false });
-    if (textData) setTexts(textData);
+    setPage(0);
+    const { data: textData } = await supabase.from("texts").select("*").eq("room_id", roomId).order("created_at", { ascending: false }).range(0, PAGE_SIZE - 1);
+    if (textData) {
+      setTexts(textData);
+      setHasMoreTexts(textData.length === PAGE_SIZE);
+    }
 
-    const { data: fileData } = await supabase.from("files").select("*").eq("room_id", roomId).order("created_at", { ascending: false });
-    if (fileData) setFiles(fileData);
+    const { data: fileData } = await supabase.from("files").select("*").eq("room_id", roomId).order("created_at", { ascending: false }).range(0, PAGE_SIZE - 1);
+    if (fileData) {
+      setFiles(fileData);
+      setHasMoreFiles(fileData.length === PAGE_SIZE);
+    }
+  };
+
+  const fetchMoreContent = async () => {
+    if (!room?.id || isFetchingMore) return;
+    if (!hasMoreFiles && !hasMoreTexts) return;
+
+    setIsFetchingMore(true);
+    const nextPage = page + 1;
+    const from = nextPage * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    let newTexts: any[] = [];
+    let newFiles: any[] = [];
+
+    if (hasMoreTexts) {
+      const { data } = await supabase.from("texts").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).range(from, to);
+      if (data) {
+        newTexts = data;
+        setHasMoreTexts(data.length === PAGE_SIZE);
+      }
+    }
+
+    if (hasMoreFiles) {
+      const { data } = await supabase.from("files").select("*").eq("room_id", room.id).order("created_at", { ascending: false }).range(from, to);
+      if (data) {
+        newFiles = data;
+        setHasMoreFiles(data.length === PAGE_SIZE);
+      }
+    }
+
+    if (newTexts.length > 0) {
+      setTexts(prev => {
+        const existingIds = new Set(prev.map(t => t.id));
+        const filtered = newTexts.filter(t => !existingIds.has(t.id));
+        return [...prev, ...filtered];
+      });
+    }
+
+    if (newFiles.length > 0) {
+      setFiles(prev => {
+        const existingIds = new Set(prev.map(f => f.id));
+        const filtered = newFiles.filter(f => !existingIds.has(f.id));
+        return [...prev, ...filtered];
+      });
+    }
+
+    setPage(nextPage);
+    setIsFetchingMore(false);
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop <= clientHeight + 150 && !isFetchingMore) {
+      if (hasMoreFiles || hasMoreTexts) {
+        fetchMoreContent();
+      }
+    }
   };
 
   useEffect(() => {
@@ -152,6 +227,10 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
     }
   };
 
+  const handleRoomDeletedError = () => {
+    setIsRoomExpiredModalOpen(true);
+  };
+
   const handlePostText = async () => {
     if (!newText.trim()) return;
     setIsPostingText(true);
@@ -171,9 +250,13 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
           return [data[0], ...prev];
         });
       }
-    } catch (e) {
-      console.error(e);
-      setNewText(textToPost);
+    } catch (e: any) {
+      if (e?.code === '23503') {
+        handleRoomDeletedError();
+      } else {
+        console.error(e);
+        setNewText(textToPost);
+      }
     } finally {
       setIsPostingText(false);
     }
@@ -196,6 +279,11 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     for (const file of acceptedFiles) {
+      if (file.size > 50 * 1024 * 1024) {
+        alert(`File ${file.name} is too large. Maximum size is 50MB.`);
+        continue;
+      }
+      
       const fileExt = file.name.split('.').pop();
       const fileName = `${uuidv4()}.${fileExt}`;
       const filePath = `${room.id}/${fileName}`;
@@ -204,7 +292,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
       setUploadProgress(prev => ({ ...prev, [fileId]: 0 }));
 
       const interval = setInterval(() => {
+        if (abortedUploads.current.has(fileId)) {
+          clearInterval(interval);
+          return;
+        }
         setUploadProgress(prev => {
+          if (abortedUploads.current.has(fileId)) return prev;
           const current = prev[fileId] || 0;
           if (current >= 90) return prev;
           return { ...prev, [fileId]: current + (Math.random() * 15 + 5) };
@@ -221,6 +314,13 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
         const [{ error: uploadError }] = await Promise.all([uploadPromise, delayPromise]);
 
         clearInterval(interval);
+        
+        if (abortedUploads.current.has(fileId)) {
+           abortedUploads.current.delete(fileId);
+           await supabase.storage.from("filedrop").remove([filePath]);
+           throw new Error("Upload aborted by user");
+        }
+
         if (uploadError) throw uploadError;
         setUploadProgress(prev => ({ ...prev, [fileId]: 100 }));
 
@@ -240,9 +340,15 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
             return [data[0], ...prev];
           });
         }
-      } catch (err) {
+      } catch (err: any) {
         clearInterval(interval);
-        console.error("Upload failed", err);
+        if (err?.message === "Upload aborted by user") {
+          console.log(err.message);
+        } else if (err?.code === '23503') {
+          handleRoomDeletedError();
+        } else {
+          console.error("Upload failed", err);
+        }
       }
       
       setTimeout(() => {
@@ -251,7 +357,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
            delete newP[fileId];
            return newP;
         });
-      }, 1000);
+      }, 500);
     }
   }, [room]);
 
@@ -266,12 +372,27 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
     return data.publicUrl;
   };
 
+  const getThumbnailUrl = (path: string) => {
+    const { data } = supabase.storage.from('filedrop').getPublicUrl(path, {
+      transform: {
+        width: 400,
+        height: 400,
+        resize: 'contain',
+        quality: 70
+      }
+    });
+    return data.publicUrl;
+  };
+
   const handleDownload = async (path: string, fileName: string, fileId: string) => {
     if (downloadProgress[fileId] !== undefined) return;
     try {
+      const controller = new AbortController();
+      abortControllers.current[fileId] = controller;
       setDownloadProgress(prev => ({ ...prev, [fileId]: 0 }));
+      
       const url = getFileUrl(path);
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
       
       if (!response.body) {
         const { data, error } = await supabase.storage.from('filedrop').download(path);
@@ -305,9 +426,14 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
       setDownloadProgress(prev => ({ ...prev, [fileId]: 100 }));
       const blob = new Blob(chunks);
       triggerDownload(blob, fileName);
-    } catch (err) {
-      console.error("Error downloading file:", err);
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log("Download aborted by user");
+      } else {
+        console.error("Error downloading file:", err);
+      }
     } finally {
+      delete abortControllers.current[fileId];
       setTimeout(() => {
         setDownloadProgress(prev => {
            const newP = { ...prev };
@@ -327,6 +453,26 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
       a.click();
       URL.revokeObjectURL(url);
       document.body.removeChild(a);
+  };
+
+  const cancelUpload = (fileId: string) => {
+    abortedUploads.current.add(fileId);
+    setUploadProgress(prev => {
+      const newP = { ...prev };
+      delete newP[fileId];
+      return newP;
+    });
+  };
+
+  const cancelDownload = (fileId: string) => {
+    if (abortControllers.current[fileId]) {
+      abortControllers.current[fileId].abort();
+    }
+    setDownloadProgress(prev => {
+      const newP = { ...prev };
+      delete newP[fileId];
+      return newP;
+    });
   };
 
   const confirmDeleteItem = async () => {
@@ -404,7 +550,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
   }
 
   return (
-    <div {...getRootProps()} className="flex-1 flex flex-col relative min-h-0 h-full">
+    <div {...getRootProps()} className="flex-1 flex flex-col relative min-h-0 h-[calc(100dvh-49px)] max-h-[calc(100dvh-49px)] overflow-hidden">
       <input {...getInputProps()} />
       
       {isDragActive && (
@@ -471,6 +617,47 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
         )}
       </AnimatePresence>
 
+      {/* Room Expired Modal */}
+      <AnimatePresence>
+        {isRoomExpiredModalOpen && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="glass-card w-full max-w-sm p-6 relative z-10 overflow-hidden border-orange-500/30"
+            >
+              <div className="absolute -top-24 -left-24 w-48 h-48 bg-orange-500/20 rounded-full blur-[3xl] pointer-events-none" />
+              
+              <div className="flex flex-col items-center text-center mb-6 mt-2 relative z-10">
+                <div className="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center mb-4 border border-orange-500/30">
+                  <AlertTriangle className="w-6 h-6 text-orange-400" />
+                </div>
+                <h2 className="text-xl font-bold font-outfit text-white mb-2">Room Unavailable</h2>
+                <p className="text-white/70 text-sm">
+                  This room has expired or been destroyed by another user.
+                </p>
+              </div>
+
+              <div className="flex relative z-10">
+                <button
+                  onClick={() => router.push("/")}
+                  className="flex-1 py-3 rounded-xl font-bold flex items-center justify-center bg-orange-500 hover:bg-orange-600 text-white transition-colors cursor-pointer"
+                >
+                  Return Home
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Delete Item Confirmation Modal */}
       <AnimatePresence>
         {itemToDelete && (
@@ -529,19 +716,19 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
         )}
       </AnimatePresence>
 
-      <div className="container mx-auto px-4 py-4 max-w-6xl flex-1 flex flex-col h-full">
-        <div className="glass-card p-3 md:p-4 mb-4 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 z-10">
+      <div className="container mx-auto px-4 py-4 max-w-6xl flex-1 flex flex-col h-full min-h-0">
+        <div className="glass-card p-2 md:p-3 mb-4 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-10">
           <div className="text-center sm:text-left">
-            <h1 className="text-xl md:text-2xl font-bold font-outfit text-white">Room: {room.name}</h1>
-            <p className="text-white/60 text-xs md:text-sm mt-1">Expires at {new Date(room.expires_at).toLocaleString()}</p>
+            <h1 className="text-lg md:text-xl font-bold font-outfit text-white">Room: {room.name}</h1>
+            <p className="text-white/60 text-[10px] md:text-xs mt-0.5">Expires at {new Date(room.expires_at).toLocaleString()}</p>
           </div>
           <div className="flex gap-2">
-             <button onClick={shareLink} className="px-3 py-1.5 md:px-4 md:py-2 flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm font-medium transition-colors">
-                {isCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                <span className="hidden sm:inline">{isCopied ? "Copied" : "Share Link"}</span>
+             <button onClick={shareLink} className="px-2 py-1.5 md:px-3 md:py-1.5 flex items-center gap-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-xs font-medium transition-colors">
+                {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">{isCopied ? "Copied" : "Share"}</span>
              </button>
-             <button onClick={() => setIsDestroyModalOpen(true)} className="px-3 py-1.5 md:px-4 md:py-2 flex items-center gap-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm font-medium transition-colors">
-                <Trash2 className="w-4 h-4" />
+             <button onClick={() => setIsDestroyModalOpen(true)} className="px-2 py-1.5 md:px-3 md:py-1.5 flex items-center gap-1.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-xs font-medium transition-colors">
+                <Trash2 className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Destroy</span>
              </button>
           </div>
@@ -552,7 +739,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
             {Object.entries(uploadProgress).map(([id, progress]) => (
               <div key={id} className="w-full flex flex-col gap-1.5">
                 <div className="flex justify-between items-center text-xs text-white/60">
-                  <span>Uploading file...</span>
+                  <div className="flex items-center gap-2">
+                    <span>Uploading file...</span>
+                    <button onClick={() => cancelUpload(id)} className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white" title="Cancel Upload">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                   <span>{Math.min(100, Math.round(progress))}%</span>
                 </div>
                 <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
@@ -573,7 +765,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
             {Object.entries(downloadProgress).map(([id, progress]) => (
               <div key={id} className="w-full flex flex-col gap-1.5">
                 <div className="flex justify-between items-center text-xs text-white/60">
-                  <span>Downloading file...</span>
+                  <div className="flex items-center gap-2">
+                    <span>Downloading file...</span>
+                    <button onClick={() => cancelDownload(id)} className="p-1 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white" title="Cancel Download">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                   <span>{Math.min(100, Math.round(progress))}%</span>
                 </div>
                 <div className="w-full bg-white/10 rounded-full h-2 overflow-hidden">
@@ -589,7 +786,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto custom-scrollbar pb-32 md:pb-24 relative z-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar pb-32 md:pb-24 relative z-0" onScroll={handleScroll}>
           {texts.length === 0 && files.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-white/40 space-y-4">
                <div className="p-4 bg-white/5 rounded-full">
@@ -600,47 +797,51 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pb-4">
               {files.map(f => (
-                <div key={f.id} className="glass-card p-4 flex flex-col justify-between hover:bg-white/5 transition-colors group">
+                <div key={f.id} className="glass-card p-4 flex flex-col justify-between hover:bg-white/5 transition-colors group relative">
+                  <div className="absolute top-2 right-2 flex gap-2 z-10">
+                    <button 
+                      onClick={() => handleDownload(f.file_path, f.file_name, f.id)} 
+                      disabled={downloadProgress[f.id] !== undefined}
+                      className="p-2 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                      title="Download File"
+                    >
+                      {downloadProgress[f.id] !== undefined ? (
+                         <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                         <Download className="w-4 h-4" />
+                      )}
+                    </button>
+                    <button 
+                      onClick={() => setItemToDelete({ id: f.id, type: 'file', path: f.file_path })} 
+                      className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors flex items-center justify-center cursor-pointer"
+                      title="Delete File"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  
                   <div className="flex flex-col gap-3 mb-4">
                     <div className="flex items-start gap-3">
-                      <div className="p-2 bg-white/5 rounded-lg text-primary shrink-0">
+                      <div className="p-2 bg-white/5 rounded-lg text-primary shrink-0 mt-1">
                         {renderFileIcon(f.file_type, f.file_name)}
                       </div>
-                      <div className="overflow-hidden">
+                      <div className="overflow-hidden pr-16">
                         <p className="font-medium text-sm truncate" title={f.file_name}>{f.file_name}</p>
-                        <p className="text-xs text-white/40 mt-1">{(f.size / 1024 / 1024).toFixed(2)} MB</p>
+                        <p className="text-xs text-white/40 mt-1">{(f.size / 1024 / 1024).toFixed(2)} MB • {f.file_name.split('.').pop()?.toUpperCase()}</p>
                       </div>
                     </div>
                     {/* Image Preview */}
                     {f.file_type.includes('image') && (
-                      <div className="w-full h-32 rounded-lg overflow-hidden bg-black/20 mt-2 flex items-center justify-center">
+                      <div className="w-full h-32 rounded-lg overflow-hidden bg-black/20 mt-2 flex items-center justify-center relative">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getFileUrl(f.file_path)} alt={f.file_name} className="max-w-full max-h-full object-contain" />
+                        <img 
+                          src={getThumbnailUrl(f.file_path)} 
+                          alt={f.file_name} 
+                          className="max-w-full max-h-full object-contain" 
+                          loading="lazy" 
+                        />
                       </div>
                     )}
-                  </div>
-                  <div className="flex justify-end mt-auto gap-2">
-                    <button 
-                      onClick={() => setItemToDelete({ id: f.id, type: 'file', path: f.file_path })} 
-                      className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-semibold cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </button>
-                    <button 
-                      onClick={() => handleDownload(f.file_path, f.file_name, f.id)} 
-                      disabled={downloadProgress[f.id] !== undefined}
-                      className="p-2 bg-primary/10 text-primary hover:bg-primary hover:text-white rounded-lg transition-colors flex items-center gap-2 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                    >
-                      {downloadProgress[f.id] !== undefined ? (
-                         <>
-                           <Loader2 className="w-4 h-4 animate-spin" /> Downloading...
-                         </>
-                      ) : (
-                         <>
-                           <Download className="w-4 h-4" /> Download
-                         </>
-                      )}
-                    </button>
                   </div>
                 </div>
               ))}
@@ -651,7 +852,7 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
                      <button onClick={() => copyToClipboard(t.content)} className="p-2 bg-white/5 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors cursor-pointer" title="Copy Text">
                        <Copy className="w-4 h-4" />
                      </button>
-                     <button onClick={() => setItemToDelete({ id: t.id, type: 'text' })} className="p-2 bg-white/5 text-white/60 hover:text-red-400 hover:bg-red-500/20 rounded-lg transition-colors cursor-pointer" title="Delete Text">
+                     <button onClick={() => setItemToDelete({ id: t.id, type: 'text' })} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-colors flex items-center justify-center cursor-pointer" title="Delete Text">
                        <Trash2 className="w-4 h-4" />
                      </button>
                    </div>
@@ -660,6 +861,12 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
                    </p>
                 </div>
               ))}
+            </div>
+          )}
+          
+          {isFetchingMore && (
+            <div className="w-full flex justify-center py-6">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           )}
         </div>

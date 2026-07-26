@@ -43,10 +43,10 @@ export default function Header() {
         </Link>
 
         <div className="flex items-center gap-4">
-          {/* <Link href="/about" className="text-sm font-medium text-white/60 hover:text-white transition-colors flex items-center gap-1.5 hidden sm:flex">
+          <Link href="/about" className="text-sm font-medium text-white/60 hover:text-white transition-colors flex items-center gap-1.5 hidden sm:flex">
             <Info className="w-4 h-4" />
             About
-          </Link> */}
+          </Link>
           {isPwaInstallable && (
             <button 
               onClick={handleInstallClick}
