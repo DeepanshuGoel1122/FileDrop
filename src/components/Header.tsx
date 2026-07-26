@@ -8,7 +8,13 @@ export default function Header() {
   const [isPwaInstallable, setIsPwaInstallable] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
+  const [isStandalone, setIsStandalone] = useState(false);
+
   useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsStandalone(window.matchMedia('(display-mode: standalone)').matches);
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -27,12 +33,14 @@ export default function Header() {
         setIsPwaInstallable(false);
       }
       setDeferredPrompt(null);
+    } else {
+      alert("To install this app:\n\nOn iOS Safari: Tap the Share button and select 'Add to Home Screen'.\nOn Android/Desktop Chrome: Look for the Install icon in the address bar or browser menu.");
     }
   };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/50 backdrop-blur-md">
-      <div className="container mx-auto px-4 h-12 flex items-center justify-between">
+      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 group">
           <div className="bg-primary/20 p-2 rounded-xl group-hover:bg-primary/30 transition-colors">
             <DownloadCloud className="w-6 h-6 text-primary" />
@@ -43,14 +51,10 @@ export default function Header() {
         </Link>
 
         <div className="flex items-center gap-4">
-          <Link href="/about" className="text-sm font-medium text-white/60 hover:text-white transition-colors flex items-center gap-1.5 hidden sm:flex">
-            <Info className="w-4 h-4" />
-            About
-          </Link>
-          {isPwaInstallable && (
+          {!isStandalone && (
             <button 
               onClick={handleInstallClick}
-              className="glass-button text-xs font-semibold px-4 py-2 rounded-full hidden sm:block"
+              className="glass-button text-xs font-semibold px-4 py-2 rounded-full"
             >
               Install App
             </button>
