@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Clock, Zap, ArrowRight, Lock, Loader2, X, ChevronDown } from "lucide-react";
+import { Shield, Clock, Zap, ArrowRight, Lock, Loader2, X, ChevronDown, Share2 } from "lucide-react";
 import { generateRoomName } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import Footer from "@/components/Footer";
@@ -58,6 +58,10 @@ export default function Home() {
     setError("");
     setExpiryDays(1);
     setIsGeneratingName(false);
+  };
+
+  const handleDirectCreateClick = () => {
+    router.push('/d');
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -133,6 +137,11 @@ export default function Home() {
       icon: <Zap className="w-6 h-6 text-amber-400" />,
       title: "Instant Sharing",
       description: "Share files, text, and URLs instantly with a unique readable room link."
+    },
+    {
+      icon: <Share2 className="w-6 h-6 text-blue-400" />,
+      title: "Direct Mode (P2P)",
+      description: "Send massive files directly between browsers. No size limits, zero server storage."
     }
   ];
 
@@ -169,7 +178,7 @@ export default function Home() {
           No registration required. Everything is destroyed automatically.
         </motion.p>
         
-        <div className="flex flex-col sm:flex-row items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center gap-4 flex-wrap justify-center">
           <motion.button
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -199,11 +208,21 @@ export default function Home() {
           >
             Join Room
           </motion.button>
+          
+          <motion.button
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+            onClick={handleDirectCreateClick}
+            className="glass-card flex items-center gap-2 px-8 py-4 rounded-2xl text-lg font-bold text-emerald-400 border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5 transition-all duration-300 group"
+          >
+            Direct
+          </motion.button>
         </div>
       </section>
 
       <section className="w-full max-w-5xl mx-auto py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {features.map((feature, idx) => (
             <motion.div
               key={idx}

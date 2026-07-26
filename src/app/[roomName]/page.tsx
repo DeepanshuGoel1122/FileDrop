@@ -83,7 +83,6 @@ export default function RoomPage({ params }: { params: Promise<{ roomName: strin
       if (roomData.password_hash === passwordHash) {
         setRoom(roomData);
         setIsAuthenticated(true);
-        sessionStorage.setItem(`room_pwd_${roomName}`, pwd);
         fetchContent(roomData.id);
       } else {
         setError("Incorrect Password!");

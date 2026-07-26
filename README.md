@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  
+  # 🚀 FileDrop
+  
+  **Secure, Ephemeral, and Blazingly Fast File Sharing**
+  
+  [![Next.js](https://img.shields.io/badge/Next.js-14-black?style=flat&logo=next.js)](https://nextjs.org/)
+  [![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat&logo=typescript)](https://www.typescriptlang.org/)
+  [![Supabase](https://img.shields.io/badge/Supabase-Realtime-4ade80?style=flat&logo=supabase)](https://supabase.com/)
+  [![WebRTC](https://img.shields.io/badge/WebRTC-P2P-orange?style=flat&logo=webrtc)](https://webrtc.org/)
+  [![Tailwind CSS](https://img.shields.io/badge/Tailwind-CSS-38bdf8?style=flat&logo=tailwind-css)](https://tailwindcss.com/)
 
-## Getting Started
+  <br />
 
-First, run the development server:
+  <p>
+    FileDrop is a modern, privacy-first file and text sharing application designed for absolute simplicity. No accounts, no subscriptions, and no tracking. Just instant, secure data transfers across devices.
+  </p>
 
+</div>
+
+---
+
+## ✨ Key Features
+
+### 🛡️ Secure & Ephemeral Normal Rooms
+- **Custom Room Creation:** Generate random room names or create your own custom named rooms. 
+- **Password Protected:** Every room is secured with a password, ensuring only intended recipients can join.
+- **Auto-Destructing:** Rooms automatically expire and are permanently wiped from the database after a chosen timeframe (1 to 30 days).
+- **Store Text & Files:** Upload large files, images, code snippets, or text clips. Everything syncs in real-time.
+
+### ⚡ Direct Mode (P2P WebRTC)
+- **Zero Server Storage:** Share massive, multi-gigabyte files instantly without ever uploading them to a server.
+- **No Size Limits:** Files stream directly between browsers over WebRTC. 
+- **Maximum Privacy:** When you close the tab, the room vanishes instantly. Absolute privacy guaranteed.
+- **Live Transfer Progress:** See real-time upload and download progress bars as chunks are transferred over the network.
+
+### 🎨 Beautiful Modern UI
+- **Glassmorphism:** Built with stunning glassmorphic cards, smooth gradients, and interactive animations using Framer Motion.
+- **Responsive:** Works perfectly on Desktop, Tablet, and Mobile.
+- **Custom Scrollbars:** Immersive design down to the smallest details.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Frontend Framework:** [Next.js 14](https://nextjs.org/) (App Router, React 18)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+- **Animations:** [Framer Motion](https://www.framer.com/motion/)
+- **Backend / Database:** [Supabase](https://supabase.com/) (PostgreSQL & Storage)
+- **Realtime Sync:** Supabase Realtime Broadcast Channels
+- **P2P Networking:** WebRTC (RTCPeerConnection, RTCDataChannel)
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Node.js 18.x or later
+- A [Supabase](https://supabase.com/) account (Free tier is perfectly fine)
+
+### 1. Clone the repository
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/deepanshugoel1122/FileDrop.git
+cd FileDrop
 ```
 
+### 2. Install Dependencies
+```bash
+npm install
+```
+
+### 3. Environment Variables
+Create a `.env.local` file in the root directory and add your Supabase credentials:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### 4. Supabase Setup
+You will need to run the `supabase_schema.sql` file provided in the repository inside your Supabase SQL Editor. This will set up the `rooms` table, `files` storage bucket, and appropriate RLS policies for secure ephemeral sharing.
+
+### 5. Run the Development Server
+```bash
+npm run dev
+```
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🔒 Security & Privacy
 
-## Learn More
+FileDrop is built with privacy at its core.
+1. **No Accounts:** We do not collect user emails, names, or tracking data.
+2. **Password Hashing:** Passwords are mathematically hashed (`SHA-256`) *before* they are sent to the database. The server never knows your plain-text password.
+3. **Database Rules:** Strict Row Level Security (RLS) ensures rooms can only be accessed with the correct credentials.
+4. **Direct Mode:** Bypasses our backend infrastructure entirely, utilizing secure WebRTC Data Channels.
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🤝 Contributing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Contributions, issues, and feature requests are welcome! 
+Feel free to check [issues page](https://github.com/deepanshugoel1122/FileDrop/issues).
 
-## Deploy on Vercel
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+<div align="center">
+  Made with ❤️ for the community by Deepanshu Goel.
+</div>
